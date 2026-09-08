@@ -2550,6 +2550,19 @@ class KimiK3DecoderLayer(nn.Module):
             )
             if padded_o_proj is not None:
                 return padded_o_proj
+            if self.all_reduce_fusion:
+                # The fused pull needs the persistent o_proj buffer. Extend its
+                # view and zero only the padding, preserving the computed rows.
+                out = k3_ar_fusion.symm_buffer(
+                    k3_ar_fusion.ATTN_O_PROJ,
+                    num_padded,
+                    attn_out.shape[-1],
+                    attn_out.dtype,
+                )
+                if out.data_ptr() != attn_out.data_ptr():
+                    out[:num_real] = attn_out
+                out[num_real:].zero_()
+                return out
             out = hidden_states.new_zeros(num_padded, attn_out.shape[-1])
             out[:num_real] = attn_out
             return out
